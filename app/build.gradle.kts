@@ -38,14 +38,6 @@ android {
         buildConfigField("int", "MIN_SDK_VERSION", "$minSdk")
     }
 
-    // --- Chỉnh sửa để build unsigned APK ---
-    signingConfigs {
-        create("release") {
-            // Không dùng keystore, giữ null
-            signingConfig = null
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -54,8 +46,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // không ký số
-            signingConfig = null
+            // Không khai báo signingConfig → Gradle sẽ build unsigned APK
         }
 
         applicationVariants.all {
