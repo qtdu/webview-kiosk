@@ -10,7 +10,6 @@ import android.webkit.WebChromeClient
 import android.webkit.URLUtil.isValidUrl
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.LinearProgressIndicator
@@ -95,11 +94,13 @@ fun WebviewScreen(navController: NavController) {
 
     // --- Upload file support variables ---
     var filePathCallback: ValueCallback<Array<Uri>>? = null
-    val getContent =
-        activity?.registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            filePathCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: emptyArray())
-            filePathCallback = null
-        }
+    val FILE_SELECT_CODE = 1001
+
+    fun openFileChooser() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent.type = "*/*"
+        activity?.startActivityForResult(intent, FILE_SELECT_CODE)
+    }
 
     if (userSettings.searchSuggestionEngine != SearchSuggestionEngineOption.NONE) {
         LaunchedEffect(addressBarHasFocus, urlBarText.text) {
@@ -150,7 +151,7 @@ fun WebviewScreen(navController: NavController) {
         )
     )
 
-    // === BẮT ĐẦU: upload file support ===
+    // --- WebChromeClient with file upload support ---
     webView.webChromeClient = object : WebChromeClient() {
         override fun onShowFileChooser(
             webView: android.webkit.WebView?,
@@ -158,11 +159,10 @@ fun WebviewScreen(navController: NavController) {
             fileChooserParams: FileChooserParams?
         ): Boolean {
             filePathCallback = filePathCallback_
-            getContent?.launch("*/*") // hoặc "image/*" nếu chỉ cho upload ảnh
+            openFileChooser()
             return true
         }
     }
-    // === KẾT THÚC: upload file support ===
 
     fun customLoadUrl(newUrl: String) { /* giữ nguyên code loadUrl từ bản gốc */ }
 
@@ -174,7 +174,7 @@ fun WebviewScreen(navController: NavController) {
         }
     }
 
-    // --- Các phần UI và Compose khác giữ nguyên ---
+    // --- Compose UI ---
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (showAddressBar) {
@@ -195,18 +195,33 @@ fun WebviewScreen(navController: NavController) {
             }
 
             Box(modifier = Modifier.weight(1f)) {
-                AndroidView(factory = { ctx ->
-                    webView
-                }, modifier = Modifier.fillMaxSize())
+                AndroidView(factory = { ctx -> webView }, modifier = Modifier.fillMaxSize())
                 if (progress < 100) {
                     LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
+                }
+                if (addressBarHasFocus && suggestions.isNotEmpty() && userSettings.searchSuggestionEngine != SearchSuggestionEngineOption.NONE) {
+                    AddressBarSearchSuggestions(
+                        suggestions = suggestions,
+                        onSelect = { addressBarSearch(it) },
+                        modifier = Modifier.align(Alignment.TopStart)
+                    )
                 }
             }
         }
     }
 
-    // --- Các phần khác giữ nguyên: FloatingMenu, BackPressHandler, Dialogs ---
+    // --- Floating menu, BackPressHandler, Dialogs ---
     BackPressHandler(::customLoadUrl)
     BasicAuthDialog(authHandler, authHost, authRealm) { authHandler = null }
     LinkOptionsDialog(link = linkToOpen, onDismiss = { linkToOpen = null }, onOpenLink = { customLoadUrl(it) })
+}
+
+// --- Trong MainActivity.kt hoặc cùng file ---
+// Phải override onActivityResult để nhận file upload
+override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    if (requestCode == 1001) {
+        filePathCallback?.onReceiveValue(data?.data?.let { arrayOf(it) } ?: emptyArray())
+        filePathCallback = null
+    }
 }
