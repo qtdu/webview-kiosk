@@ -1,6 +1,5 @@
 package uk.nktnet.webviewkiosk.ui.screens
 
-import android.app.Activity
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
@@ -9,6 +8,7 @@ import android.webkit.WebChromeClient
 import android.webkit.URLUtil.isValidUrl
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -47,7 +47,7 @@ import java.io.File
 @Composable
 fun WebviewScreen(navController: NavController) {
     val context = LocalContext.current
-    val activity = LocalActivity.current as? Activity
+    val activity = LocalActivity.current
     val focusManager = LocalFocusManager.current
 
     val userSettings = remember { UserSettings(context) }
@@ -92,9 +92,9 @@ fun WebviewScreen(navController: NavController) {
     var lastErrorUrl by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(listOf<String>()) }
 
-    // --- Upload file support variables ---
+    // --- Upload file support ---
     var filePathCallback: ValueCallback<Array<Uri>>? = null
-    val getContent = activity?.registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    val getContent = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         filePathCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: emptyArray())
         filePathCallback = null
     }
@@ -145,7 +145,7 @@ fun WebviewScreen(navController: NavController) {
         )
     )
 
-    // --- upload file support ---
+    // Upload file support
     webView.webChromeClient = object : WebChromeClient() {
         override fun onShowFileChooser(
             webView: android.webkit.WebView?,
@@ -153,7 +153,7 @@ fun WebviewScreen(navController: NavController) {
             fileChooserParams: FileChooserParams?
         ): Boolean {
             filePathCallback = filePathCallback_
-            getContent?.launch("*/*") // hoặc "image/*" nếu chỉ cho upload ảnh
+            getContent.launch("*/*") // hoặc "image/*" nếu chỉ cho upload ảnh
             return true
         }
     }
@@ -168,7 +168,7 @@ fun WebviewScreen(navController: NavController) {
         }
     }
 
-    // --- Compose UI ---
+    // --- UI ---
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (showAddressBar) {
@@ -189,8 +189,9 @@ fun WebviewScreen(navController: NavController) {
             }
 
             Box(modifier = Modifier.weight(1f)) {
-                AndroidView(factory = { ctx -> webView }, modifier = Modifier.fillMaxSize())
-
+                AndroidView(factory = { ctx ->
+                    webView
+                }, modifier = Modifier.fillMaxSize())
                 if (progress < 100) {
                     LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
                 }
@@ -198,7 +199,7 @@ fun WebviewScreen(navController: NavController) {
                 if (addressBarHasFocus && suggestions.isNotEmpty() && userSettings.searchSuggestionEngine != SearchSuggestionEngineOption.NONE) {
                     AddressBarSearchSuggestions(
                         suggestions = suggestions,
-                        onSelect = { addressBarSearch(it) },
+                        onSelect = { selected -> addressBarSearch(selected) },
                         modifier = Modifier.align(Alignment.TopStart)
                     )
                 }
@@ -206,8 +207,26 @@ fun WebviewScreen(navController: NavController) {
         }
     }
 
-    // --- Floating menu, dialogs, back handler ---
+    // FloatingMenu, BackPressHandler, Dialogs
+    if (!isLocked) {
+        FloatingMenuButton(
+            onHomeClick = { focusManager.clearFocus(); WebViewNavigation.goHome(::customLoadUrl, systemSettings, userSettings) },
+            onLockClick = { focusManager.clearFocus(); tryLockTask(activity, showToast) },
+            navController = navController
+        )
+    }
+
     BackPressHandler(::customLoadUrl)
     BasicAuthDialog(authHandler, authHost, authRealm) { authHandler = null }
     LinkOptionsDialog(link = linkToOpen, onDismiss = { linkToOpen = null }, onOpenLink = { customLoadUrl(it) })
+    InactivityTimeoutHandler(systemSettings, userSettings, ::customLoadUrl)
+    if (userSettings.kioskControlPanelRegion != KioskControlPanelRegionOption.DISABLED
+        || userSettings.backButtonHoldAction == BackButtonHoldActionOption.OPEN_KIOSK_CONTROL_PANEL
+    ) {
+        KioskControlPanel(10, ::customLoadUrl)
+    }
+
+    val cookieManager = CookieManager.getInstance()
+    cookieManager.setAcceptCookie(userSettings.acceptCookies)
+    cookieManager.setAcceptThirdPartyCookies(webView, userSettings.acceptThirdPartyCookies)
 }
