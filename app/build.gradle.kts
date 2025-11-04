@@ -22,7 +22,6 @@ android {
     }
 
     dependenciesInfo {
-        // https://gitlab.com/fdroid/fdroiddata/-/issues/3330
         includeInApk = false
         includeInBundle = false
     }
@@ -39,25 +38,26 @@ android {
         buildConfigField("int", "MIN_SDK_VERSION", "$minSdk")
     }
 
+    // --- Chỉnh sửa để build unsigned APK ---
     signingConfigs {
         create("release") {
-            storeFile = file("keystore.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            // Không dùng keystore, giữ null
+            signingConfig = null
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // không ký số
+            signingConfig = null
         }
+
         applicationVariants.all {
             outputs.all {
                 val outputImpl = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
