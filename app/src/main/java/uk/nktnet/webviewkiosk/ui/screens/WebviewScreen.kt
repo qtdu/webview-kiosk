@@ -1,7 +1,6 @@
 package uk.nktnet.webviewkiosk.ui.screens
 
 import android.app.Activity
-import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
@@ -10,6 +9,7 @@ import android.webkit.WebChromeClient
 import android.webkit.URLUtil.isValidUrl
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.LinearProgressIndicator
@@ -94,12 +94,9 @@ fun WebviewScreen(navController: NavController) {
 
     // --- Upload file support variables ---
     var filePathCallback: ValueCallback<Array<Uri>>? = null
-    val FILE_SELECT_CODE = 1001
-
-    fun openFileChooser() {
-        val intent = Intent(Intent.ACTION_GET_CONTENT)
-        intent.type = "*/*"
-        activity?.startActivityForResult(intent, FILE_SELECT_CODE)
+    val getContent = activity?.registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        filePathCallback?.onReceiveValue(uri?.let { arrayOf(it) } ?: emptyArray())
+        filePathCallback = null
     }
 
     if (userSettings.searchSuggestionEngine != SearchSuggestionEngineOption.NONE) {
@@ -108,10 +105,7 @@ fun WebviewScreen(navController: NavController) {
                 delay(300)
                 suggestions = try {
                     withContext(Dispatchers.IO) {
-                        SearchSuggestionEngine.suggest(
-                            userSettings.searchSuggestionEngine,
-                            urlBarText.text
-                        )
+                        SearchSuggestionEngine.suggest(userSettings.searchSuggestionEngine, urlBarText.text)
                     }
                 } catch (_: Exception) {
                     emptyList()
@@ -151,7 +145,7 @@ fun WebviewScreen(navController: NavController) {
         )
     )
 
-    // --- WebChromeClient with file upload support ---
+    // --- upload file support ---
     webView.webChromeClient = object : WebChromeClient() {
         override fun onShowFileChooser(
             webView: android.webkit.WebView?,
@@ -159,7 +153,7 @@ fun WebviewScreen(navController: NavController) {
             fileChooserParams: FileChooserParams?
         ): Boolean {
             filePathCallback = filePathCallback_
-            openFileChooser()
+            getContent?.launch("*/*") // hoặc "image/*" nếu chỉ cho upload ảnh
             return true
         }
     }
@@ -196,9 +190,11 @@ fun WebviewScreen(navController: NavController) {
 
             Box(modifier = Modifier.weight(1f)) {
                 AndroidView(factory = { ctx -> webView }, modifier = Modifier.fillMaxSize())
+
                 if (progress < 100) {
                     LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
                 }
+
                 if (addressBarHasFocus && suggestions.isNotEmpty() && userSettings.searchSuggestionEngine != SearchSuggestionEngineOption.NONE) {
                     AddressBarSearchSuggestions(
                         suggestions = suggestions,
@@ -210,18 +206,8 @@ fun WebviewScreen(navController: NavController) {
         }
     }
 
-    // --- Floating menu, BackPressHandler, Dialogs ---
+    // --- Floating menu, dialogs, back handler ---
     BackPressHandler(::customLoadUrl)
     BasicAuthDialog(authHandler, authHost, authRealm) { authHandler = null }
     LinkOptionsDialog(link = linkToOpen, onDismiss = { linkToOpen = null }, onOpenLink = { customLoadUrl(it) })
-}
-
-// --- Trong MainActivity.kt hoặc cùng file ---
-// Phải override onActivityResult để nhận file upload
-override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-    super.onActivityResult(requestCode, resultCode, data)
-    if (requestCode == 1001) {
-        filePathCallback?.onReceiveValue(data?.data?.let { arrayOf(it) } ?: emptyArray())
-        filePathCallback = null
-    }
 }
