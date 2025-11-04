@@ -38,15 +38,28 @@ android {
         buildConfigField("int", "MIN_SDK_VERSION", "$minSdk")
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFileProp: String? by project
+            val keystorePasswordProp: String? by project
+            val keyAliasProp: String? by project
+            val keyPasswordProp: String? by project
+
+            storeFile = file(keystoreFileProp ?: "debug.keystore")
+            storePassword = keystorePasswordProp ?: "123456"
+            keyAlias = keyAliasProp ?: "webviewtest"
+            keyPassword = keyPasswordProp ?: "123456"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            // Không khai báo signingConfig → Gradle sẽ build unsigned APK
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("release")
         }
 
         applicationVariants.all {
